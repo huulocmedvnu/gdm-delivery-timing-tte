@@ -1,7 +1,7 @@
 """Numbers and tables for the manuscript, all from outputs/ (gdm_ccw.json, psm.json, balance.tsv, flow_counts.tsv) and
 work/counts_gdm.tsv (baseline characteristics). Writes outputs/manuscript_numbers.json. Differences and risk ratios are
 reported as delivery within the week versus expectant management (negative difference: fewer events with delivery)."""
-import os, json, subprocess, platform, shutil
+import os, json, subprocess, platform
 import numpy as np, pandas as pd, statsmodels
 import gdm_ccw as g
 
@@ -87,35 +87,37 @@ for k in ["all"] + g.CLS:
         N[f"psm_{o}_{k}"] = f1(d_); N[f"psm_{o}_{k}_ci"] = f"{f1(lo_)} to {f1(hi_)}"; N[f"psm_{o}_{k}_rr"] = f2(1 / v["rr"]); N[f"psm_{o}_{k}_rrci"] = f"{f2(1 / v['rr_hi'])}–{f2(1 / v['rr_lo'])}"
         N[f"psm_{o}_{k}_ri"] = f1(v["risk_induced"]); N[f"psm_{o}_{k}_rn"] = f1(v["risk_not"])
 
-# Table 1: baseline characteristics by observed course in week 39
-I = pop[(pop.ga == 39) & (pop.induct == 1) & (pop.kind == "nat")]; NI = pop.drop(I.index)
+# Table 1: baseline characteristics by observed course in week 39 (I induced and born in week 39, S other end of pregnancy in week 39, O ongoing at 40 0/7 weeks)
+def courses(x):
+    i = x[(x.ga == 39) & (x.induct == 1) & (x.kind == "nat")]; o = x[x.ga >= 40]; return [i, x[(x.ga == 39)].drop(i.index), o, x]
+G1 = courses(pop)
+def line(lab, groups, f):
+    return f"| {lab} | " + " | ".join(f"{c0(f(x))} ({pct(f(x), x.n.sum())})" for x in groups) + " |"
 def rows(var, labels, title):
-    out = [f"| **{title}** | | | |"]
+    out = [f"| **{title}** | | | | |"]
     for code, lab in labels:
-        sel = lambda x: x[x[var].isin(code if isinstance(code, list) else [code])].n.sum()
-        out.append(f"| {lab} | {c0(sel(I))} ({pct(sel(I), I.n.sum())}) | {c0(sel(NI))} ({pct(sel(NI), NI.n.sum())}) | {c0(sel(pop))} ({pct(sel(pop), pop.n.sum())}) |")
+        out.append(line(lab, G1, lambda x: x[x[var].isin(code if isinstance(code, list) else [code])].n.sum()))
     return out
 rawpop = raw  # 7 BMI classes for description
 def rows_raw(title):
-    I_ = rawpop[(rawpop.ga == 39) & (rawpop.induct == 1) & (rawpop.kind == "nat")]; NI_ = rawpop.drop(I_.index)
-    out = [f"| **{title}** | | | |"]
+    out = [f"| **{title}** | | | | |"]
     for code, lab in [([0, 1], "Less than 25.0"), ([2], "25.0–29.9"), ([3], "30.0–34.9"), ([4], "35.0–39.9"), ([5, 6], "40.0 or higher")]:
-        s = lambda x: x[x.bmic.isin(code)].n.sum()
-        out.append(f"| {lab} | {c0(s(I_))} ({pct(s(I_), I_.n.sum())}) | {c0(s(NI_))} ({pct(s(NI_), NI_.n.sum())}) | {c0(s(rawpop))} ({pct(s(rawpop), rawpop.n.sum())}) |")
+        out.append(line(lab, courses(rawpop), lambda x: x[x.bmic.isin(code)].n.sum()))
     return out
-T1 = ["| Characteristic | Induced and born in week 39 | Not induced in week 39 | All |", "|---|---|---|---|",
-      f"| Number | {c0(I.n.sum())} | {c0(NI.n.sum())} | {c0(pop.n.sum())} |"]
+T1 = ["| Characteristic | Labor induction with birth in week 39 | Birth without induction or stillbirth in week 39* | Continued to 40 0/7 weeks | All |", "|---|---|---|---|---|",
+      "| Number | " + " | ".join(c0(x.n.sum()) for x in G1) + " |"]
 T1 += rows_raw("Prepregnancy BMI, kg/m²")
 T1 += rows("age6", [(0, "Younger than 20"), (1, "20–24"), (2, "25–29"), (3, "30–34"), (4, "35–39"), (5, "40 or older")], "Maternal age, y")
 T1 += rows("nullip", [(1, "Nulliparous"), (0, "Parous"), (9, "Unknown")], "Parity")
-T1 += rows("race", [(3, "American Indian or Alaska Native, Native Hawaiian or Other Pacific Islander, or more than one race"), (4, "Asian"), (2, "Black"), (7, "Hispanic"), (1, "White"), (8, "Unknown")], "Race and ethnicity*")
+T1 += rows("race", [(3, "American Indian or Alaska Native, Native Hawaiian or Other Pacific Islander, or more than one race"), (4, "Asian"), (2, "Black"), (7, "Hispanic"), (1, "White"), (8, "Unknown")], "Race and ethnicity†")
 T1 += rows("educ", [(1, "High school or less"), (2, "Some college or associate degree"), (3, "Bachelor's degree or higher"), (9, "Unknown")], "Education")
 T1 += rows("precare", [(1, "First trimester"), (2, "Second trimester"), (3, "Third trimester"), (4, "None"), (9, "Unknown")], "Prenatal care began")
 T1 += rows("wic", [(1, "Yes")], "WIC participation")
 T1 += rows("smoke", [(1, "Yes")], "Smoking during pregnancy")
 T1 += rows("inftr", [(1, "Yes")], "Infertility treatment")
 T1 += rows("ghyp", [(1, "Yes")], "Gestational hypertension or preeclampsia")
-T1 += rows("ga", [(39, "Born in week 39"), (40, "Born in week 40"), ([41, 42, 43, 44], "Born at 41 weeks or later")], "Gestational age at birth")
+T1 += ["| **End of pregnancy** | | | | |", line("Stillbirth", G1, lambda x: x[x.kind != "nat"].n.sum()),
+       line("Born in week 40", G1, lambda x: x[(x.ga == 40) & (x.kind == "nat")].n.sum()), line("Born at 41 weeks or later", G1, lambda x: x[(x.ga >= 41) & (x.kind == "nat")].n.sum())]
 N["table1"] = "\n".join(T1)
 N["pct_nullip"] = pct(pop[pop.nullip == 1].n.sum(), pop.n.sum()); N["pct_ob30plus"] = pct(raw[raw.bmic >= 3].n.sum(), raw.n.sum())
 N["pct_ghyp"] = pct(pop[pop.ghyp == 1].n.sum(), pop.n.sum()); N["pct_race_unknown"] = pct(pop[pop.race.isin([8, 9])].n.sum(), pop.n.sum())
@@ -166,6 +168,6 @@ N["etable_balance"] = "\n".join(["| Trial | BMI, kg/m² | Course I vs O, unweigh
 
 # software versions
 N["python_version"] = platform.python_version(); N["statsmodels_version"] = statsmodels.__version__
-N["rust_version"] = subprocess.run([shutil.which("rustc") or os.path.expanduser("~/.cargo/bin/rustc"), "--version"], capture_output=True, text=True).stdout.split()[1]
+N["rust_version"] = subprocess.run([os.path.expanduser("~/.cargo/bin/rustc"), "--version"], capture_output=True, text=True).stdout.split()[1]
 json.dump(N, open(os.path.join(OUT, "manuscript_numbers.json"), "w"), indent=1)
 print(len(N), "numbers;", {k: N[k] for k in ["flow_all", "n_cohort", "w39_death_all_d", "w39_death_all_ci", "w39_death_all_rr", "w39_death_all_nn", "ratio_ob35_lt25", "sens_death_range", "python_version", "rust_version"]})

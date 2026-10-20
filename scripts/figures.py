@@ -5,9 +5,10 @@ each strategy. B to G, differences per 10,000 for stillbirth and secondary outco
 Figure 3: the trials at 38, 39 and 40 weeks, differences by week for all classes combined and the two extreme BMI classes.
 Also writes outputs/balance.tsv. Input outputs/gdm_ccw.json and outputs/manuscript_numbers.json."""
 import os, json
-import pandas as pd, plotly.graph_objects as go
+import pandas as pd, plotly.graph_objects as go, plotly.io as pio
 from plotly.subplots import make_subplots
 from PIL import Image
+pio.kaleido.scope.mathjax = None   # otherwise kaleido can print a MathJax loading message into PDF exports
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT, FIG = os.path.join(ROOT, "outputs"), os.path.join(ROOT, "figures"); os.makedirs(FIG, exist_ok=True)
@@ -167,8 +168,8 @@ for x, tx in [(0.21, "Observed course"), (0.575, "Delivery in week 39"), (0.862,
 f.add_shape(type="line", x0=0.43, x1=0.72, y0=0.398, y1=0.398, line=dict(color=DELIV, width=3))
 f.add_shape(type="line", x0=0.735, x1=0.99, y0=0.398, y1=0.398, line=dict(color=EXPECT, width=3))
 cy = [0.335, 0.215, 0.095]; CC = [DELIV, G_LT25, EXPECT]
-crs = ["<b>I</b>  Induced and born in week 39<br>n = " + N["n_I_w39"], "<b>S</b>  Stillbirth, spontaneous labor or<br>prelabor cesarean in week 39<br>n = " + N["n_S_w39"],
-       "<b>O</b>  Ongoing at 40 0/7 weeks<br>n = " + N["n_O_w39"]]
+crs = ["<b>I</b>  Labor induction with birth<br>in week 39<br>n = " + N["n_I_w39"], "<b>S</b>  Birth without induction<br>or stillbirth in week 39<br>n = " + N["n_S_w39"],
+       "<b>O</b>  Continued to 40 0/7 weeks<br>n = " + N["n_O_w39"]]
 for tx, cc, yy in zip(crs, CC, cy):
     box(0.02, yy - 0.05, 0.40, yy + 0.05, tx, size=15); f.add_shape(type="rect", x0=0.02, y0=yy - 0.05, x1=0.034, y1=yy + 0.05, fillcolor=cc, line=dict(width=0))
 cells = [("✓ Counted<br>weight 1 + P(O)/P(I)", "✕ Censored at induction"),
