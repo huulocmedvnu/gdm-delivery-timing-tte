@@ -1,0 +1,6 @@
+inputs/
+work/
+outputs/
+figures/
+target/
+__pycache__/

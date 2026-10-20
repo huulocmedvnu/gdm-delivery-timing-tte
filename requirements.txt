@@ -1,0 +1,7 @@
+numpy==2.4.4
+pandas==2.3.3
+statsmodels==0.14.6
+patsy==1.0.2
+plotly==5.24.1
+kaleido==0.2.1
+pillow==12.2.0

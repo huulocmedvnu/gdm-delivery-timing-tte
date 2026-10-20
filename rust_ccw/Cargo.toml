@@ -1,0 +1,13 @@
+[package]
+name = "ccw"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rayon = "1.12"
+serde_json = "1.0.154"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
