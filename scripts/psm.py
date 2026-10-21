@@ -86,8 +86,9 @@ def est(mask):
     q = lambda v, p: round(float(np.nanquantile(v, p)), 3)
     for o, (yT, yC, dT, dC) in Y.items():
         d = np.vstack(dr[o]); rd = (d[:, 1] - d[:, 0]) * 1e4; rr = d[:, 1] / d[:, 0]; pt = (yT.sum() / dT.sum(), yC.sum() / dC.sum())
-        out[o] = dict(risk_induced=round(pt[0] * 1e4, 3), risk_not=round(pt[1] * 1e4, 3), rd=round((pt[1] - pt[0]) * 1e4, 3), rd_lo=q(rd, .025), rd_hi=q(rd, .975),
-                      rr=round(pt[1] / pt[0], 3) if pt[0] > 0 else None, rr_lo=q(rr, .025), rr_hi=q(rr, .975), events_induced=int(yT.sum()), events_not=int(yC.sum()))
+        out[o] = dict(risk_induced=q(d[:, 0] * 1e4, .5), risk_not=q(d[:, 1] * 1e4, .5), rd=q(rd, .5), rd_lo=q(rd, .025), rd_hi=q(rd, .975),
+                      rr=q(rr, .5) if pt[0] > 0 else None, rr_lo=q(rr, .025), rr_hi=q(rr, .975), p_not_higher=round(float(np.mean(rd > 0)), 4),
+                      events_induced=int(yT.sum()), events_not=int(yC.sum()))
     return out
 res["all"] = est(np.ones(len(P), bool))
 for k in g.CLS: res[k] = est(P.bmic.values == k); res[k]["n_pairs"] = int((P.bmic == k).sum())

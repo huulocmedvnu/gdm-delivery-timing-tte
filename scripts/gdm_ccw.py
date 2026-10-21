@@ -96,13 +96,19 @@ q = lambda v, p: round(float(np.nanquantile(v, p)), 3)
 
 
 def summarise(R, outcomes=None):
+    """Posterior summaries from the Bayesian bootstrap draws: medians, 95% credible intervals (2.5th and 97.5th percentiles)
+    and posterior probabilities. rd is expectant minus delivery per 10,000 (positive = fewer events with delivery).
+    The plug-in estimate from the full-data fit is kept as *_plugin for reference."""
     out = {}
     for o in (outcomes or R["pt"]):
         out[o] = {}
         for k, (a, b) in R["pt"][o].items():
             dd = R["draws"][o][k]; rd = (dd[:, 1] - dd[:, 0]) * S; rr = dd[:, 1] / np.where(dd[:, 0] > 0, dd[:, 0], np.nan)
-            out[o][k] = dict(risk_A=round(a * S, 3), risk_B=round(b * S, 3), rd=round((b - a) * S, 3), rd_lo=q(rd, .025), rd_hi=q(rd, .975),
-                             rr=round(b / a, 3) if a > 0 else None, rr_lo=q(rr, .025), rr_hi=q(rr, .975), p_B_higher=round(float(np.mean(rd > 0)), 4))
+            out[o][k] = dict(risk_A=q(dd[:, 0] * S, .5), risk_B=q(dd[:, 1] * S, .5), rd=q(rd, .5), rd_lo=q(rd, .025), rd_hi=q(rd, .975),
+                             rr=q(rr, .5) if a > 0 else None, rr_lo=q(rr, .025), rr_hi=q(rr, .975), p_B_higher=round(float(np.mean(rd > 0)), 4),
+                             p_fewer_ge={str(t): round(float(np.mean(rd >= t)), 4) for t in (1, 5, 10)},
+                             p_more_ge={str(t): round(float(np.mean(rd <= -t)), 4) for t in (1, 5, 10)},
+                             risk_A_plugin=round(a * S, 3), risk_B_plugin=round(b * S, 3), rd_plugin=round((b - a) * S, 3))
     return out
 
 
@@ -137,8 +143,8 @@ def trial(w, ndraw, seed, tag, d=None):
         js["qba"][str(x)] = {}
         for k in CLS + ["all"]:
             dA = R["draws"]["death"][k][:, 0] - x * R["draws"]["sbS"][k][:, 0]; dB = R["draws"]["death"][k][:, 1]
-            a = R["pt"]["death"][k][0] - x * R["pt"]["sbS"][k][0]; b = R["pt"]["death"][k][1]; rd = (dB - dA) * S; rr = dB / dA
-            js["qba"][str(x)][k] = dict(rd=round((b - a) * S, 3), rd_lo=q(rd, .025), rd_hi=q(rd, .975), rr=round(b / a, 3), rr_lo=q(rr, .025), rr_hi=q(rr, .975))
+            rd = (dB - dA) * S; rr = dB / dA
+            js["qba"][str(x)][k] = dict(rd=q(rd, .5), rd_lo=q(rd, .025), rd_hi=q(rd, .975), rr=q(rr, .5), rr_lo=q(rr, .025), rr_hi=q(rr, .975))
     bal = balance(R, os.path.join(W, "rust_ccw", tag)); bal.round(4).to_csv(os.path.join(OUT, f"balance_w{w}.tsv"), sep="\t", index=False)
     js["balance_max_abs"] = {k: {c_: round(float(bal[bal.bmic == k][c_].abs().max()), 3) for c_ in ["raw_I_vs_O", "A_vs_population", "B_vs_population"]} for k in CLS}
     return js, d

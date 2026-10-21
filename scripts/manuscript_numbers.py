@@ -23,12 +23,19 @@ def contrast(v):
     clear = hi < 0 or lo > 0; nn = round(1e4 / abs(d)) if clear and d != 0 else None
     return dict(a=v["risk_A"], b=v["risk_B"], d=d, lo=lo, hi=hi, rr=rr, rrlo=rrlo, rrhi=rrhi, nn=nn, nnkind=("NND" if d < 0 else "NNH") if nn else "", p=1 - v["p_B_higher"])
 
+def pr(z):
+    """Posterior probability, 3 decimals, bounded display."""
+    return ">0.999" if z >= 0.9995 else ("<0.001" if z <= 0.0005 else f"{z:.3f}")
+
 def put(prefix, v):
     x = contrast(v)
     N[f"{prefix}_a"], N[f"{prefix}_b"] = f1(x["a"]), f1(x["b"]); N[f"{prefix}_d"] = f1(x["d"]); N[f"{prefix}_ci"] = f"{f1(x['lo'])} to {f1(x['hi'])}"
     N[f"{prefix}_absd"] = f1(abs(x["d"])); N[f"{prefix}_absci"] = f"{f1(min(abs(x['lo']), abs(x['hi'])))} to {f1(max(abs(x['lo']), abs(x['hi'])))}"
     N[f"{prefix}_rr"] = f2(x["rr"]); N[f"{prefix}_rrci"] = f"{f2(x['rrlo'])}–{f2(x['rrhi'])}"; N[f"{prefix}_nn"] = f"{x['nn']:,}" if x["nn"] else "not estimated"
     N[f"{prefix}_pfewer"] = f"{1 - x['p']:.2f}" if x["d"] < 0 else f"{x['p']:.2f}"
+    N[f"{prefix}_pben"] = pr(1 - x["p"]); N[f"{prefix}_pharm"] = pr(x["p"])       # posterior probability of fewer / more events with delivery
+    for t in ("1", "5", "10"):
+        if "p_fewer_ge" in v: N[f"{prefix}_pben{t}"] = pr(v["p_fewer_ge"][t]); N[f"{prefix}_pharm{t}"] = pr(v["p_more_ge"][t])
     return x
 
 # flow
@@ -127,15 +134,15 @@ ON = {"death": "Perinatal death", "stillbirth": "Stillbirth", "neonatal": "Neona
       "aven6": "Assisted ventilation longer than 6 hours", "apg7": "5-minute Apgar score less than 7", "seiz": "Neonatal seizures", "macro": "Birth weight 4,500 g or more",
       "cesar": "Cesarean delivery‡", "plac": "Third- or fourth-degree perineal laceration", "smm": "Severe maternal morbidity§", "mtr": "Maternal transfusion",
       "uhyst": "Unplanned hysterectomy", "rupt": "Uterine rupture", "aicu": "Maternal ICU admission"}
-def trow(lab, x): return f"| {lab} | {f1(x['a'])} | {f1(x['b'])} | {f1(x['d'])} ({f1(x['lo'])} to {f1(x['hi'])}) | {f2(x['rr'])} ({f2(x['rrlo'])}–{f2(x['rrhi'])}) | {(x['nnkind'] + ' ' + format(x['nn'], ',')) if x['nn'] else '—'} |"
-T2 = ["| Outcome | Delivery in week 39 | Expectant management | Difference (95% CrI) | Risk ratio (95% CrI) | NND or NNH |", "|---|---|---|---|---|---|",
-      "| **Perinatal outcomes, per 10,000 pregnancies** | | | | | |"]
+def trow(lab, x): return f"| {lab} | {f1(x['a'])} | {f1(x['b'])} | {f1(x['d'])} ({f1(x['lo'])} to {f1(x['hi'])}) | {f2(x['rr'])} ({f2(x['rrlo'])}–{f2(x['rrhi'])}) | {pr(1 - x['p'])} | {(x['nnkind'] + ' ' + format(x['nn'], ',')) if x['nn'] else '—'} |"
+T2 = ["| Outcome | Delivery in week 39 | Expectant management | Difference (95% CrI) | Risk ratio (95% CrI) | Probability of fewer events with delivery | NND or NNH |", "|---|---|---|---|---|---|---|",
+      "| **Perinatal outcomes, per 10,000 pregnancies** | | | | | | |"]
 for o in ("death", "stillbirth", "neonatal"): T2.append(trow(ON[o], X[("w39", o, "all")]))
-T2.append("| **Perinatal death by prepregnancy BMI, kg/m²** | | | | | |")
+T2.append("| **Perinatal death by prepregnancy BMI, kg/m²** | | | | | | |")
 for k in g.CLS: T2.append(trow(TLAB[k], X[("w39", "death", k)]))
-T2.append("| **Neonatal outcomes, per 10,000 live births** | | | | | |")
+T2.append("| **Neonatal outcomes, per 10,000 live births** | | | | | | |")
 for o in ("nicu", "morb", "aven6", "apg7", "seiz", "macro"): T2.append(trow(ON[o], X[("w39", o, "all")]))
-T2.append("| **Maternal outcomes, per 10,000 live births** | | | | | |")
+T2.append("| **Maternal outcomes, per 10,000 live births** | | | | | | |")
 for o in ("cesar", "plac", "smm", "mtr", "uhyst", "rupt", "aicu"): T2.append(trow(ON[o], X[("w39", o, "all")]))
 N["table2"] = "\n".join(T2).replace("—", "NA")
 
