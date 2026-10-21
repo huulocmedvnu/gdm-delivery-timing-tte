@@ -55,93 +55,94 @@ def axis_style(f, **kw):
 
 
 # ---------------------------------------------------------------- Figure 2
+# Drawn at 1,100 px logical width so that text stays at 8 pt or more when printed at 6.5 inches,
+# also after Editorial Manager downsamples the image to about 1,170 px.
 t = T[T.trial == "w39"]
 P2 = [("stillbirth", "Stillbirth", "per 10,000 pregnancies"), ("nicu", "NICU admission", "per 10,000 live births"),
       ("morb", "Neonatal morbidity", "per 10,000 live births"), ("macro", "Birth weight ≥4,500 g", "per 10,000 live births"),
       ("smm", "Severe maternal morbidity", "per 10,000 live births"), ("mtr", "Maternal transfusion", "per 10,000 live births")]
-f = make_subplots(rows=2, cols=6, specs=[[{"colspan": 6}, None, None, None, None, None], [{}, {}, {}, {}, {}, {}]],
-                  row_heights=[0.47, 0.53], horizontal_spacing=0.022, vertical_spacing=0.2)
+f = make_subplots(rows=3, cols=3, specs=[[{"colspan": 3}, None, None], [{}, {}, {}], [{}, {}, {}]],
+                  row_heights=[0.36, 0.32, 0.32], horizontal_spacing=0.035, vertical_spacing=0.115)
 y = list(range(len(CLS))); YR = [len(CLS) - 0.45, -0.55]
-f.layout.xaxis.domain = [0, 0.66]
-# Panel A: weighted risk of perinatal death under each strategy, with the difference and NND as a side table
+f.layout.xaxis.domain = [0, 0.56]
 s = t[t.outcome == "death"].set_index("bmi").loc[CLS]
-f.add_shape(type="rect", xref="paper", yref="y", x0=-0.083, x1=1.0, y0=-0.45, y1=0.45, fillcolor=BAND, line_width=0, layer="below")
+f.add_shape(type="rect", xref="paper", yref="y", x0=-0.19, x1=1.0, y0=-0.45, y1=0.45, fillcolor=BAND, line_width=0, layer="below")
 for i, k in enumerate(CLS):
     f.add_trace(go.Scatter(x=[s.loc[k, "risk_delivery"], s.loc[k, "risk_expectant"]], y=[i, i], mode="lines", line=dict(color="#c9c8c2", width=6),
                            showlegend=False, hoverinfo="skip"), row=1, col=1)
-f.add_trace(go.Scatter(x=s.risk_expectant, y=y, mode="markers", name="Expectant management", marker=dict(color="white", size=18, line=dict(color=EXPECT, width=3))), row=1, col=1)
-f.add_trace(go.Scatter(x=s.risk_delivery, y=y, mode="markers", name="Delivery in week 39", marker=dict(color=DELIV, size=18, line=dict(color="white", width=2))), row=1, col=1)
+f.add_trace(go.Scatter(x=s.risk_expectant, y=y, mode="markers", name="Expectant management", marker=dict(color="white", size=19, line=dict(color=EXPECT, width=3))), row=1, col=1)
+f.add_trace(go.Scatter(x=s.risk_delivery, y=y, mode="markers", name="Delivery in week 39", marker=dict(color=DELIV, size=19, line=dict(color="white", width=2))), row=1, col=1)
 for i, k in enumerate(CLS):
-    f.add_annotation(x=s.loc[k, "risk_expectant"], y=i, text=num(s.loc[k, "risk_expectant"]), xshift=15, xanchor="left", showarrow=False, font=dict(size=15, color=INK2), row=1, col=1)
-    f.add_annotation(x=s.loc[k, "risk_delivery"], y=i, text=num(s.loc[k, "risk_delivery"]), xshift=-15, xanchor="right", showarrow=False, font=dict(size=15, color=DELIV), row=1, col=1)
-    f.add_annotation(xref="paper", yref="y", x=0.86, y=i, text=f"{num(s.loc[k, 'diff'])} ({num(s.loc[k, 'lo'])} to {num(s.loc[k, 'hi'])})", xanchor="right", showarrow=False, font=dict(size=15))
-    f.add_annotation(xref="paper", yref="y", x=0.985, y=i, text=f"{int(s.loc[k, 'nnd']):,}", xanchor="right", showarrow=False, font=dict(size=15))
-f.add_annotation(xref="paper", yref="y domain", x=0.86, y=1.0, yanchor="bottom", yshift=4, text="<b>Difference per 10,000 (95% CrI)</b>", xanchor="right", showarrow=False, font=dict(size=14, color=INK2))
-f.add_annotation(xref="paper", yref="y domain", x=0.985, y=1.0, yanchor="bottom", yshift=4, text="<b>NND</b>", xanchor="right", showarrow=False, font=dict(size=14, color=INK2))
-f.update_xaxes(range=[0, 28], dtick=5, title_text="Perinatal death per 10,000 pregnancies", row=1, col=1)
-f.update_yaxes(tickvals=y, ticktext=[LAB[k] for k in CLS], range=YR, tickfont=dict(size=16), row=1, col=1)
-# Panels B to G: differences, filled when the credible interval excludes zero
+    f.add_annotation(x=s.loc[k, "risk_expectant"], y=i, text=num(s.loc[k, "risk_expectant"]), xshift=14, xanchor="left", showarrow=False, font=dict(size=18, color=INK2), row=1, col=1)
+    f.add_annotation(x=s.loc[k, "risk_delivery"], y=i, text=num(s.loc[k, "risk_delivery"]), xshift=-14, xanchor="right", showarrow=False, font=dict(size=18, color=DELIV), row=1, col=1)
+    f.add_annotation(xref="paper", yref="y", x=0.865, y=i, text=f"{num(s.loc[k, 'diff'])} ({num(s.loc[k, 'lo'])} to {num(s.loc[k, 'hi'])})", xanchor="right", showarrow=False, font=dict(size=18))
+    f.add_annotation(xref="paper", yref="y", x=0.995, y=i, text=f"{int(s.loc[k, 'nnd']):,}", xanchor="right", showarrow=False, font=dict(size=18))
+f.add_annotation(xref="paper", yref="y domain", x=0.865, y=1.0, yanchor="bottom", yshift=4, text="<b>Difference per 10,000<br>(95% CrI)</b>", xanchor="right", showarrow=False, font=dict(size=17, color=INK2))
+f.add_annotation(xref="paper", yref="y domain", x=0.995, y=1.0, yanchor="bottom", yshift=4, text="<b>NND</b>", xanchor="right", showarrow=False, font=dict(size=17, color=INK2))
+f.update_xaxes(range=[0, 30], dtick=10, title_text="Perinatal death per 10,000 pregnancies", row=1, col=1)
+f.update_yaxes(tickvals=y, ticktext=[LAB[k] for k in CLS], range=YR, tickfont=dict(size=18), row=1, col=1)
 for j, (o, title, unit) in enumerate(P2):
-    c = j + 1; n = j + 2
+    r, c = j // 3 + 2, j % 3 + 1; n = j + 2
     s = t[t.outcome == o].set_index("bmi").loc[CLS]
     excl = (s.hi < 0) | (s.lo > 0)
     f.add_shape(type="rect", xref=f"x{n} domain", yref=f"y{n}", x0=0, x1=1, y0=-0.45, y1=0.45, fillcolor=BAND, line_width=0, layer="below")
-    f.add_shape(type="line", xref=f"x{n}", yref=f"y{n} domain", x0=0, x1=0, y0=0, y1=1, line=dict(color=INK2, width=1.3))
+    f.add_shape(type="line", xref=f"x{n}", yref=f"y{n} domain", x0=0, x1=0, y0=0, y1=1, line=dict(color=INK2, width=1.5))
     f.add_trace(go.Scatter(x=s["diff"], y=y, mode="markers", showlegend=False,
-                           marker=dict(color=[INK if e else "white" for e in excl], size=[17] + [12] * 4, symbol=["diamond"] + ["circle"] * 4,
-                                       line=dict(color=INK, width=2)),
-                           error_x=dict(type="data", symmetric=False, array=s.hi - s["diff"], arrayminus=s["diff"] - s.lo, color=INK, thickness=2, width=0)),
-                  row=2, col=c)
+                           marker=dict(color=[INK if e else "white" for e in excl], size=[19] + [14] * 4, symbol=["diamond"] + ["circle"] * 4,
+                                       line=dict(color=INK, width=2.2)),
+                           error_x=dict(type="data", symmetric=False, array=s.hi - s["diff"], arrayminus=s["diff"] - s.lo, color=INK, thickness=2.4, width=0)),
+                  row=r, col=c)
     lo_, hi_ = min(s.lo.min(), 0), max(s.hi.max(), 0); pad = 0.1 * (hi_ - lo_)
-    f.update_xaxes(range=[lo_ - pad, hi_ + pad], title_text=unit, title_font=dict(size=13, color=INK2), nticks=5, row=2, col=c)
-    f.update_yaxes(tickvals=y, ticktext=[LAB[k] for k in CLS], showticklabels=(c == 1), range=YR, tickfont=dict(size=16), row=2, col=c)
+    f.update_xaxes(range=[lo_ - pad, hi_ + pad], title_text=unit, title_font=dict(size=17, color=INK2), nticks=4, row=r, col=c)
+    f.update_yaxes(tickvals=y, ticktext=[LAB[k] for k in CLS], showticklabels=(c == 1), range=YR, tickfont=dict(size=18), row=r, col=c)
     f.add_annotation(xref=f"x{n} domain", yref=f"y{n} domain", x=0, y=1.02, yanchor="bottom", xanchor="left", text=f"<b>{'BCDEFG'[j]}</b>  {title}",
-                     showarrow=False, font=dict(size=16))
+                     showarrow=False, font=dict(size=20))
 axis_style(f)
-f.update_xaxes(title_font=dict(size=15, color=INK2), row=1, col=1)
-f.add_annotation(xref="x domain", yref="y domain", x=0, y=1.0, yanchor="bottom", xanchor="left", yshift=38, text="<b>A</b>  Perinatal death with each strategy",
-                 showarrow=False, font=dict(size=18))
-f.add_annotation(xref="paper", yref="paper", x=0, y=-0.11, xanchor="left", showarrow=False, font=dict(size=14, color=INK2),
-                 text="B–G: difference, delivery in week 39 minus expectant management, with 95% credible interval. Left of the line, fewer events with delivery. "
-                      "Filled marks: interval excludes zero.")
-f.update_layout(margin=dict(l=150, r=25, t=95, b=110), legend=dict(orientation="h", xref="paper", x=0.0, xanchor="left", y=1.0, yanchor="bottom", font=dict(size=15),
+f.update_xaxes(tickfont=dict(size=18, color=INK2))
+f.update_xaxes(title_font=dict(size=18, color=INK2), row=1, col=1)
+f.add_annotation(xref="x domain", yref="y domain", x=0, y=1.0, yanchor="bottom", xanchor="left", yshift=44, text="<b>A</b>  Perinatal death with each strategy",
+                 showarrow=False, font=dict(size=21))
+f.add_annotation(xref="paper", yref="paper", x=-0.19, y=-0.088, xanchor="left", showarrow=False, font=dict(size=17, color=INK2), align="left",
+                 text="B–G: difference, delivery in week 39 minus expectant management, with 95% credible interval.<br>"
+                      "Left of the line, fewer events with delivery. Filled marks: interval excludes zero.")
+f.update_layout(margin=dict(l=215, r=20, t=120, b=150), legend=dict(orientation="h", xref="paper", x=0.0, xanchor="left", y=1.0, yanchor="bottom", font=dict(size=18),
                 bgcolor="rgba(0,0,0,0)"))
-f.layout.legend.y = f.layout.yaxis.domain[1] + 0.005; f.layout.legend.x = 0.30
-for ya in ("y domain", "y2 domain"):
-    f.add_annotation(xref="paper", yref=ya, x=-0.083, y=1.0, yanchor="bottom", yshift=4, xanchor="left", showarrow=False, text="<b>BMI, kg/m²</b>", font=dict(size=14, color=INK2))
-save(f, "Figure_2", 1800, 1150)
+f.layout.legend.y = f.layout.yaxis.domain[1] + 0.006; f.layout.legend.x = 0.0
+f.add_annotation(xref="paper", yref="y domain", x=-0.19, y=1.0, yanchor="bottom", yshift=4, xanchor="left", showarrow=False, text="<b>BMI, kg/m²</b>", font=dict(size=17, color=INK2))
+for ya in ("y2 domain", "y5 domain"):
+    f.add_annotation(xref="paper", yref=ya, x=-0.19, y=1.0, yanchor="bottom", yshift=4, xanchor="left", showarrow=False, text="<b>BMI, kg/m²</b>", font=dict(size=17, color=INK2))
+save(f, "Figure_2", 1100, 1350)
 
-# ---------------------------------------------------------------- Figure 3
+# ---------------------------------------------------------------- Figure 3 (same 1,100 px logical width, 4 rows by 2 columns)
 P3 = [("death", "Perinatal death"), ("neonatal", "Neonatal death"), ("nicu", "NICU admission"), ("morb", "Composite neonatal morbidity"),
       ("aven6", "Ventilation longer than 6 hours"), ("macro", "Birth weight 4,500 g or more"), ("smm", "Severe maternal morbidity"),
       ("plac", "Third- or fourth-degree laceration")]
 GRP = [("lt25", "BMI less than 25.0", G_LT25, "circle", -0.2), ("all", "All classes", G_ALL, "diamond", 0.0), ("ob35p", "BMI 35.0 or higher", G_OB35, "circle", 0.2)]
 WK = [("w38", 38), ("w39", 39), ("w40", 40)]
-f = make_subplots(rows=2, cols=4, horizontal_spacing=0.065, vertical_spacing=0.2)
+f = make_subplots(rows=4, cols=2, horizontal_spacing=0.11, vertical_spacing=0.075)
 for i, (o, title) in enumerate(P3):
-    r, c = i // 4 + 1, i % 4 + 1
-    f.add_hline(y=0, line=dict(color=INK2, width=1.3), row=r, col=c)
+    r, c = i // 2 + 1, i % 2 + 1
+    f.add_hline(y=0, line=dict(color=INK2, width=1.5), row=r, col=c)
     for k, lab, col, sym, off in GRP:
         s = T[(T.outcome == o) & (T.bmi == k)].set_index("trial").loc[[w for w, _ in WK]]
         excl = (s.hi < 0) | (s.lo > 0); xs = [g + off for _, g in WK]
-        f.add_trace(go.Scatter(x=xs, y=s["diff"], mode="lines", line=dict(color=col, width=1.6, dash="dot"), showlegend=False, hoverinfo="skip",
+        f.add_trace(go.Scatter(x=xs, y=s["diff"], mode="lines", line=dict(color=col, width=1.8, dash="dot"), showlegend=False, hoverinfo="skip",
                                opacity=0.7), row=r, col=c)
         f.add_trace(go.Scatter(x=xs, y=s["diff"], mode="markers", name=lab, legendgroup=lab, showlegend=(i == 0),
-                               marker=dict(color=[col if e else "white" for e in excl], size=15 if k == "all" else 12, symbol=sym, line=dict(color=col, width=2.2)),
-                               error_y=dict(type="data", symmetric=False, array=s.hi - s["diff"], arrayminus=s["diff"] - s.lo, color=col, thickness=2, width=0)),
+                               marker=dict(color=[col if e else "white" for e in excl], size=17 if k == "all" else 14, symbol=sym, line=dict(color=col, width=2.4)),
+                               error_y=dict(type="data", symmetric=False, array=s.hi - s["diff"], arrayminus=s["diff"] - s.lo, color=col, thickness=2.4, width=0)),
                       row=r, col=c)
-    f.add_annotation(xref="x domain" if i == 0 else f"x{i + 1} domain", yref="y domain" if i == 0 else f"y{i + 1} domain", x=0, y=1.04,
-                     text=f"<b>{'ABCDEFGH'[i]}</b>  {title}", xanchor="left", yanchor="bottom", showarrow=False, font=dict(size=16))
-f.update_xaxes(tickvals=[38, 39, 40], ticktext=["38", "39", "40"], range=[37.5, 40.5], showgrid=False, zeroline=False, showline=True,
-               linecolor=GRID, ticks="", tickfont=dict(size=15, color=INK2))
-f.update_yaxes(showgrid=True, gridcolor=GRID, zeroline=False, showline=False, ticks="", tickfont=dict(size=14, color=INK2), nticks=6)
-for i in range(8): f.update_yaxes(title_text="per 10,000" if i % 4 == 0 else None, title_font=dict(size=14, color=INK2), row=i // 4 + 1, col=i % 4 + 1)
-f.add_annotation(xref="paper", yref="paper", x=0.5, y=-0.1, showarrow=False, font=dict(size=15, color=INK2),
-                 text="Week of time zero (delivery within that week compared with expectant management). Below the line, fewer events with delivery.")
-f.add_annotation(xref="paper", yref="paper", x=0.5, y=-0.145, showarrow=False, font=dict(size=14, color=INK2),
-                 text="Differences per 10,000 pregnancies (A, B) or live births (C–H), 95% credible intervals. Filled marks: interval excludes zero.")
-f.update_layout(margin=dict(l=90, r=30, t=110, b=140), legend=dict(orientation="h", x=0.5, xanchor="center", y=1.09, yanchor="bottom", font=dict(size=16)))
-save(f, "Figure_3", 1800, 1000)
+    f.add_annotation(xref="x domain" if i == 0 else f"x{i + 1} domain", yref="y domain" if i == 0 else f"y{i + 1} domain", x=0, y=1.03,
+                     text=f"<b>{'ABCDEFGH'[i]}</b>  {title}", xanchor="left", yanchor="bottom", showarrow=False, font=dict(size=20))
+f.update_xaxes(tickvals=[38, 39, 40], ticktext=["Week 38", "Week 39", "Week 40"], range=[37.5, 40.5], showgrid=False, zeroline=False, showline=True,
+               linecolor=GRID, ticks="", tickfont=dict(size=18, color=INK2))
+f.update_yaxes(showgrid=True, gridcolor=GRID, zeroline=False, showline=False, ticks="", tickfont=dict(size=18, color=INK2), nticks=5,
+               title_text="per 10,000", title_font=dict(size=17, color=INK2))
+f.add_annotation(xref="paper", yref="paper", x=0.5, y=-0.068, showarrow=False, font=dict(size=17, color=INK2), align="center",
+                 text="Week of time zero: delivery within that week compared with expectant management. Below the line, fewer events with delivery.<br>"
+                      "Differences per 10,000 pregnancies (A, B) or live births (C–H), 95% credible intervals. Filled marks: interval excludes zero.")
+f.update_layout(margin=dict(l=95, r=25, t=95, b=135), legend=dict(orientation="h", x=0.5, xanchor="center", y=1.035, yanchor="bottom", font=dict(size=19)))
+save(f, "Figure_3", 1100, 1350)
 
 # ---------------------------------------------------------------- Figure 1
 f = go.Figure(); f.update_xaxes(visible=False, range=[0, 1]); f.update_yaxes(visible=False, range=[0, 1])
@@ -181,7 +182,7 @@ for (a_, b_), yy in zip(cells, cy):
         box(x0, yy - 0.05, x1, yy + 0.05, tx, fill="#eaf2fc" if (on and col == DELIV) else "#efeee9" if on else "white", size=15,
             line=col if on else "#c9c8c2", color=INK if on else MUTED)
 f.add_annotation(x=0.5, y=0.0, text="P(I) and P(O): probabilities of courses I and O given covariates, estimated within each BMI class.<br>The trials at 38 and 40 weeks follow the same scheme.",
-                 showarrow=False, font=dict(size=13, color=INK2), yanchor="bottom")
+                 showarrow=False, font=dict(size=15, color=INK2), yanchor="bottom")
 f.add_annotation(x=0.0, y=1.0, text="<b>A</b>", showarrow=False, font=dict(size=24), xanchor="left", yanchor="top")
 f.add_annotation(x=0.0, y=0.485, text="<b>B</b>", showarrow=False, font=dict(size=24), xanchor="left", yanchor="top")
 f.update_layout(margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
