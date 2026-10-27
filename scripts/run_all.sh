@@ -44,5 +44,5 @@ cat work/agg_flow/*.tsv | awk -F'\t' '{n[$4]+=$5} END{for(s in n) print s"\t"n[s
 # 4. clone-censor-weight analysis, trials at 39, 40 and 38 weeks (nonparametric Poisson bootstrap with refitted weights in rust_ccw)
 (cd scripts && $PY -W ignore gdm_ccw.py main)
 # 5. reported numbers and tables, then figures and the directed acyclic graph
-(cd scripts && $PY -W ignore numbers_ppe.py > /dev/null && $PY -W ignore figures.py > /dev/null && $PY -W ignore dag.py > /dev/null)
+(cd scripts && $PY -W ignore pba.py > /dev/null && $PY -W ignore numbers_ppe.py > /dev/null && $PY -W ignore figures.py > /dev/null && $PY -W ignore dag.py > /dev/null)
 echo "done: outputs/ and figures/"

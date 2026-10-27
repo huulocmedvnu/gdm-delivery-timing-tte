@@ -15,6 +15,7 @@ individual-level data are included in this repository.
 | `scripts/download*.sh` | Download the NCHS files and user guides. |
 | `scripts/bw_thresholds.py` | Birthweight 10th percentile by week and sex. |
 | `scripts/gdm_ccw.py` | Trials at 38, 39 and 40 weeks, effect modification by BMI on the ratio and difference scales with homogeneity tests, E-values, covariate balance and sensitivity analyses. Calls `rust_ccw`. |
+| `scripts/pba.py` | Probabilistic bias analysis for an unmeasured binary confounder of perinatal death in the 39-week trial. |
 | `scripts/numbers_ppe.py`, `scripts/figures.py`, `scripts/dag.py` | Tables, reported numbers, figures and the directed acyclic graph. |
 | `scripts/validate_rust.py` | Check of `rust_ccw` against statsmodels on identical data. |
 | `scripts/util.py` | Shared helpers (design matrix, E-value). |
