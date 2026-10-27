@@ -1,8 +1,8 @@
 """PLAN (2026-10-18): clone-censor-weight emulation of delivery within week w (A) versus expectant management through
 week w (B) in singleton GDM pregnancies ongoing at w+0, w in 38, 39, 40 (primary 39), 2019-2024. Courses: I induced and
 born in week w, S other end of pregnancy in week w, O ongoing at w+1. A: S weight 1, I weight 1 + P(O|X)/P(I|X), O
-censored. B: I censored, S and O weight 1/(1 - P(I|X)). Point fit and Bayesian bootstrap (both treatment models refitted
-in every draw) in rust_ccw. Input work/counts_gdm.tsv (rust vitals gdm mode)."""
+censored. B: I censored, S and O weight 1/(1 - P(I|X)). Point fit and nonparametric Poisson bootstrap (amendment b, both treatment
+models refitted in every replicate) in rust_ccw. Input work/counts_gdm.tsv (rust vitals gdm mode)."""
 import os, sys, json, time, subprocess
 import numpy as np, pandas as pd
 from util import design, evalue
@@ -72,7 +72,7 @@ def run(d, ndraw, seed, tag, threads=48, timing=None):
     t0 = time.time(); c, lost = build(d); P = prep(c); t1 = time.time()
     outdir = os.path.join(W, "rust_ccw", tag); export(c, P, outdir)
     subprocess.run([RUST, "point", outdir], check=True, stdout=subprocess.DEVNULL); t2 = time.time()
-    subprocess.run([RUST, "draws", outdir, str(ndraw), str(seed), str(threads)], check=True, stdout=subprocess.DEVNULL); t3 = time.time()
+    subprocess.run([RUST, "draws", outdir, str(ndraw), str(seed), str(threads)], check=True, stdout=subprocess.DEVNULL, env=dict(os.environ, CCW_BOOT="freq")); t3 = time.time()
     if timing is not None: timing.update(cells=len(c), build_s=round(t1 - t0, 1), point_s=round(t2 - t1, 1), draws_s=round(t3 - t2, 1), ndraw=ndraw)
     pj = json.load(open(os.path.join(outdir, "point.json")))
     arr = np.fromfile(os.path.join(outdir, "draws.bin"), dtype="<f8").reshape(ndraw, len(OUTC), len(CLS), 2)
@@ -96,20 +96,39 @@ q = lambda v, p: round(float(np.nanquantile(v, p)), 3)
 
 
 def summarise(R, outcomes=None):
-    """Posterior summaries from the Bayesian bootstrap draws: medians, 95% credible intervals (2.5th and 97.5th percentiles)
-    and posterior probabilities. rd is expectant minus delivery per 10,000 (positive = fewer events with delivery).
-    The plug-in estimate from the full-data fit is kept as *_plugin for reference."""
+    """Amendment b: plug-in estimates from the full-data fit with 95% percentile confidence intervals from the
+    nonparametric (Poisson) bootstrap. rd is expectant minus delivery per 10,000 (positive = fewer events with delivery).
+    nnt: number needed to deliver to avoid (rd>0) or cause (rd<0) one event, given only when the CI excludes 0."""
     out = {}
     for o in (outcomes or R["pt"]):
         out[o] = {}
         for k, (a, b) in R["pt"][o].items():
             dd = R["draws"][o][k]; rd = (dd[:, 1] - dd[:, 0]) * S; rr = dd[:, 1] / np.where(dd[:, 0] > 0, dd[:, 0], np.nan)
-            out[o][k] = dict(risk_A=q(dd[:, 0] * S, .5), risk_B=q(dd[:, 1] * S, .5), rd=q(rd, .5), rd_lo=q(rd, .025), rd_hi=q(rd, .975),
-                             rr=q(rr, .5) if a > 0 else None, rr_lo=q(rr, .025), rr_hi=q(rr, .975), p_B_higher=round(float(np.mean(rd > 0)), 4),
-                             p_fewer_ge={str(t): round(float(np.mean(rd >= t)), 4) for t in (1, 5, 10)},
-                             p_more_ge={str(t): round(float(np.mean(rd <= -t)), 4) for t in (1, 5, 10)},
-                             risk_A_plugin=round(a * S, 3), risk_B_plugin=round(b * S, 3), rd_plugin=round((b - a) * S, 3))
+            rdp = (b - a) * S; lo, hi = q(rd, .025), q(rd, .975)
+            out[o][k] = dict(risk_A=round(a * S, 3), risk_B=round(b * S, 3), risk_A_lo=q(dd[:, 0] * S, .025), risk_A_hi=q(dd[:, 0] * S, .975),
+                             risk_B_lo=q(dd[:, 1] * S, .025), risk_B_hi=q(dd[:, 1] * S, .975), rd=round(rdp, 3), rd_lo=lo, rd_hi=hi,
+                             rr=round(b / a, 3) if a > 0 else None, rr_lo=q(rr, .025), rr_hi=q(rr, .975),
+                             nnt=(round(S / abs(rdp)) if (lo > 0 or hi < 0) and rdp != 0 else None))
     return out
+
+
+def homogeneity(R, o):
+    """Effect modification by BMI class versus BMI <25 on both scales, bootstrap CIs, and Wald tests of homogeneity
+    across the four classes (3 df) with the bootstrap covariance."""
+    from scipy.stats import chi2
+    pt = R["pt"][o]; dr = R["draws"][o]
+    lrr_p = {k: np.log(pt[k][1] / pt[k][0]) for k in CLS}; rd_p = {k: (pt[k][1] - pt[k][0]) * S for k in CLS}
+    lrr_d = {k: np.log(dr[k][:, 1] / dr[k][:, 0]) for k in CLS}; rd_d = {k: (dr[k][:, 1] - dr[k][:, 0]) * S for k in CLS}
+    res = {}
+    for k in CLS[1:]:
+        x = lrr_d[k] - lrr_d["lt25"]; y = rd_d[k] - rd_d["lt25"]
+        res[k] = dict(rrr=round(float(np.exp(lrr_p[k] - lrr_p["lt25"])), 3), rrr_lo=round(float(np.exp(np.nanquantile(x, .025))), 3),
+                      rrr_hi=round(float(np.exp(np.nanquantile(x, .975))), 3), drd=round(rd_p[k] - rd_p["lt25"], 3), drd_lo=q(y, .025), drd_hi=q(y, .975))
+    for name, P_, D_ in (("p_homog_rr", lrr_p, lrr_d), ("p_homog_rd", rd_p, rd_d)):
+        d = np.array([P_[k] - P_["lt25"] for k in CLS[1:]]); B = np.column_stack([D_[k] - D_["lt25"] for k in CLS[1:]])
+        B = B[np.all(np.isfinite(B), axis=1)]; V = np.cov(B, rowvar=False); st = float(d @ np.linalg.solve(V, d))
+        res[name] = float(f"{chi2.sf(st, 3):.4g}"); res[name.replace("p_", "chi2_")] = round(st, 2)
+    return res
 
 
 def balance(R, outdir):
@@ -132,10 +151,7 @@ def trial(w, ndraw, seed, tag, d=None):
     js["deaths_by_course"] = {k: {cname: int(R["c"][(R["c"].bmic == k) & (R["c"].course == ci)][["sb", "nd"]].sum().sum())
                                   for ci, cname in enumerate("ISO")} for k in CLS}
     js["primary"] = summarise(R)
-    rdd = {(o, k): (R["draws"][o][k][:, 1] - R["draws"][o][k][:, 0]) * S for o in R["draws"] for k in R["draws"][o]}
-    js["modification_vs_lt25"] = {o: {k: dict(diff=round(float(np.median(rdd[(o, k)] - rdd[(o, "lt25")])), 3), lo=q(rdd[(o, k)] - rdd[(o, "lt25")], .025),
-                                              hi=q(rdd[(o, k)] - rdd[(o, "lt25")], .975), p_larger=round(float((rdd[(o, k)] > rdd[(o, "lt25")]).mean()), 4))
-                                      for k in CLS[1:]} for o in ["death", "cesar", "macro", "nicu", "morb"]}
+    js["modification"] = {o: homogeneity(R, o) for o in ["death", "stillbirth", "neonatal", "cesar", "macro", "nicu", "morb", "smm"]}
     js["evalue_death"] = {k: dict(rr=v["rr"], e_point=evalue(v["rr"]), e_ci_limit=(evalue(v["rr_lo"]) if v["rr_lo"] > 1 else (evalue(v["rr_hi"]) if v["rr_hi"] < 1 else 1.0)))
                           for k, v in js["primary"]["death"].items()}
     js["qba"] = {}
@@ -144,7 +160,8 @@ def trial(w, ndraw, seed, tag, d=None):
         for k in CLS + ["all"]:
             dA = R["draws"]["death"][k][:, 0] - x * R["draws"]["sbS"][k][:, 0]; dB = R["draws"]["death"][k][:, 1]
             rd = (dB - dA) * S; rr = dB / dA
-            js["qba"][str(x)][k] = dict(rd=q(rd, .5), rd_lo=q(rd, .025), rd_hi=q(rd, .975), rr=q(rr, .5), rr_lo=q(rr, .025), rr_hi=q(rr, .975))
+            pa = R["pt"]["death"][k][0] - x * R["pt"]["sbS"][k][0]; pb = R["pt"]["death"][k][1]
+            js["qba"][str(x)][k] = dict(rd=round((pb - pa) * S, 3), rd_lo=q(rd, .025), rd_hi=q(rd, .975), rr=round(pb / pa, 3), rr_lo=q(rr, .025), rr_hi=q(rr, .975))
     bal = balance(R, os.path.join(W, "rust_ccw", tag)); bal.round(4).to_csv(os.path.join(OUT, f"balance_w{w}.tsv"), sep="\t", index=False)
     js["balance_max_abs"] = {k: {c_: round(float(bal[bal.bmic == k][c_].abs().max()), 3) for c_ in ["raw_I_vs_O", "A_vs_population", "B_vs_population"]} for k in CLS}
     return js, d
@@ -155,10 +172,11 @@ def sensitivity(w, d):
     d1 = d.copy(); d1.loc[(d1.ga == w + 1) & (d1.induct == 1) & (d1.kind != "fet"), "course"] = 0
     variants = (("exclude_gestational_hypertension", d[d.ghyp != 1]), ("late_induction_to_I", d1),
                 ("no_prelabor_cesarean_week_w", d[~((d.kind != "fet") & (d.ga == w) & (d.induct != 1) & (d.trial == 0))]),
-                ("cohort_2016_2024", load(w, 2016, 2024)))
+                ("cohort_2016_2024", load(w, 2016, 2024)),
+                ("low_indication", d[(d.ghyp != 1) & (d.inftr != 1) & (d.age6 <= 3)]))
     for i, (name, dd) in enumerate(variants):
         R = run(dd, 400, 20000 + 1000 * i, f"w{w}_{name}")
-        sens[name] = summarise(R, ["death", "cesar", "macro", "nicu"]); sens[name]["n_at_risk"] = int(R["c"].risk.sum())
+        sens[name] = summarise(R, ["death", "stillbirth", "neonatal", "cesar", "macro", "nicu", "morb", "smm"]); sens[name]["n_at_risk"] = int(R["c"].risk.sum())
     return sens
 
 

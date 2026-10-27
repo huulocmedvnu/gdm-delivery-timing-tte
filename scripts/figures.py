@@ -3,7 +3,7 @@ Figure 1: study flow (A) and clone-censor-weight design (B).
 Figure 2: delivery in week 39 compared with expectant management by BMI class. A, weighted risk of perinatal death under
 each strategy. B to G, differences per 10,000 for stillbirth and secondary outcomes.
 Figure 3: the trials at 38, 39 and 40 weeks, differences by week for all classes combined and the two extreme BMI classes.
-Also writes outputs/balance.tsv. Input outputs/gdm_ccw.json and outputs/manuscript_numbers.json."""
+Also writes outputs/figure_data_ppe.tsv. Input outputs/gdm_ccw.json and outputs/numbers_ppe.json."""
 import os, json
 import pandas as pd, plotly.graph_objects as go, plotly.io as pio
 from plotly.subplots import make_subplots
@@ -13,7 +13,7 @@ pio.kaleido.scope.mathjax = None   # otherwise kaleido can print a MathJax loadi
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT, FIG = os.path.join(ROOT, "outputs"), os.path.join(ROOT, "figures"); os.makedirs(FIG, exist_ok=True)
 R = json.load(open(os.path.join(OUT, "gdm_ccw.json")))
-N = json.load(open(os.path.join(OUT, "manuscript_numbers.json")))
+N = json.load(open(os.path.join(OUT, "numbers_ppe.json")))
 
 # Palette (validated categorical slots 1 to 3 plus neutral inks). Delivery is blue throughout, expectant management grey.
 INK, INK2, MUTED, GRID, BAND = "#0b0b0b", "#52514e", "#8a8984", "#e6e5e1", "#f3f2ee"
@@ -21,10 +21,22 @@ DELIV, EXPECT = "#2a78d6", "#8a8984"
 G_ALL, G_LT25, G_OB35 = INK, "#1baf7a", "#eb6834"
 FONT = "Arial"
 CLS = ["all", "lt25", "over", "ob30", "ob35p"]
-LAB = {"all": "<b>All classes</b>", "lt25": "Less than 25.0", "over": "25.0–29.9", "ob30": "30.0–34.9", "ob35p": "35.0 or higher"}
+LAB = {"all": "<b>All classes</b>", "lt25": "<25.0", "over": "25.0 to 29.9", "ob30": "30.0 to 34.9", "ob35p": "≥35.0"}
 
+
+import re as _re
+def _aogs(t):
+    """PPE style: birthweight, labour, ranges with 'to'; comma thousands kept."""
+    if not isinstance(t, str): return t
+    t = t.replace("Birth weight", "Birthweight").replace("birth weight", "birthweight").replace("Labor", "Labour").replace("labor", "labour")
+    return _re.sub(r"(\S)–(\S)", r"\1 to \2", t)
 
 def save(f, name, w, h):
+    for a in f.layout.annotations: a.text = _aogs(a.text)
+    for k in f.layout:
+        if k.startswith(("xaxis", "yaxis")) and f.layout[k].title and f.layout[k].title.text: f.layout[k].title.text = _aogs(f.layout[k].title.text)
+    for tr in f.data:
+        if getattr(tr, "name", None): tr.name = _aogs(tr.name)
     f.update_layout(width=w, height=h, paper_bgcolor="white", plot_bgcolor="white", font=dict(family=FONT, size=17, color=INK))
     f.write_html(os.path.join(FIG, f"{name}.html"), include_plotlyjs="cdn"); f.write_image(os.path.join(FIG, f"{name}.pdf"))
     png = os.path.join(FIG, f"{name}.png"); f.write_image(png, scale=4.5)
@@ -40,12 +52,12 @@ def table(w):
             x = v[k]; d, lo, hi = -x["rd"], -x["rd_hi"], -x["rd_lo"]          # delivery minus expectant
             n = round(1e4 / abs(d)) if abs(d) > 0 and (hi < 0 or lo > 0) else None
             rows.append(dict(trial=w, outcome=o, bmi=k, risk_delivery=x["risk_A"], risk_expectant=x["risk_B"], diff=round(d, 2),
-                             lo=round(lo, 2), hi=round(hi, 2), p_fewer_with_delivery=x["p_B_higher"],
+                             lo=round(lo, 2), hi=round(hi, 2), 
                              nnd=n if (n and d < 0) else None, nnh=n if (n and d > 0) else None))
     return pd.DataFrame(rows)
 
 
-T = pd.concat([table(w) for w in ("w39", "w38", "w40")]); T.to_csv(os.path.join(OUT, "balance.tsv"), sep="\t", index=False)
+T = pd.concat([table(w) for w in ("w39", "w38", "w40")]); T.to_csv(os.path.join(OUT, "figure_data_ppe.tsv"), sep="\t", index=False)
 num = lambda v: f"{v:.1f}".replace("-", "−")
 
 
@@ -59,7 +71,7 @@ def axis_style(f, **kw):
 # also after Editorial Manager downsamples the image to about 1,170 px.
 t = T[T.trial == "w39"]
 P2 = [("stillbirth", "Stillbirth", "per 10,000 pregnancies"), ("nicu", "NICU admission", "per 10,000 live births"),
-      ("morb", "Neonatal morbidity", "per 10,000 live births"), ("macro", "Birth weight ≥4,500 g", "per 10,000 live births"),
+      ("morb", "Neonatal morbidity", "per 10,000 live births"), ("macro", "Birthweight ≥4500 g", "per 10,000 live births"),
       ("smm", "Severe maternal morbidity", "per 10,000 live births"), ("mtr", "Maternal transfusion", "per 10,000 live births")]
 f = make_subplots(rows=3, cols=3, specs=[[{"colspan": 3}, None, None], [{}, {}, {}], [{}, {}, {}]],
                   row_heights=[0.36, 0.32, 0.32], horizontal_spacing=0.035, vertical_spacing=0.115)
@@ -75,9 +87,9 @@ f.add_trace(go.Scatter(x=s.risk_delivery, y=y, mode="markers", name="Delivery in
 for i, k in enumerate(CLS):
     f.add_annotation(x=s.loc[k, "risk_expectant"], y=i, text=num(s.loc[k, "risk_expectant"]), xshift=14, xanchor="left", showarrow=False, font=dict(size=18, color=INK2), row=1, col=1)
     f.add_annotation(x=s.loc[k, "risk_delivery"], y=i, text=num(s.loc[k, "risk_delivery"]), xshift=-14, xanchor="right", showarrow=False, font=dict(size=18, color=DELIV), row=1, col=1)
-    f.add_annotation(xref="paper", yref="y", x=0.865, y=i, text=f"{num(s.loc[k, 'diff'])} ({num(s.loc[k, 'lo'])} to {num(s.loc[k, 'hi'])})", xanchor="right", showarrow=False, font=dict(size=18))
+    f.add_annotation(xref="paper", yref="y", x=0.865, y=i, text=f"{num(s.loc[k, 'diff'])} ({num(s.loc[k, 'lo'])}, {num(s.loc[k, 'hi'])})", xanchor="right", showarrow=False, font=dict(size=18))
     f.add_annotation(xref="paper", yref="y", x=0.995, y=i, text=f"{int(s.loc[k, 'nnd']):,}", xanchor="right", showarrow=False, font=dict(size=18))
-f.add_annotation(xref="paper", yref="y domain", x=0.865, y=1.0, yanchor="bottom", yshift=4, text="<b>Difference per 10,000<br>(95% CrI)</b>", xanchor="right", showarrow=False, font=dict(size=17, color=INK2))
+f.add_annotation(xref="paper", yref="y domain", x=0.865, y=1.0, yanchor="bottom", yshift=4, text="<b>Difference per 10,000<br>(95% CI)</b>", xanchor="right", showarrow=False, font=dict(size=17, color=INK2))
 f.add_annotation(xref="paper", yref="y domain", x=0.995, y=1.0, yanchor="bottom", yshift=4, text="<b>NND</b>", xanchor="right", showarrow=False, font=dict(size=17, color=INK2))
 f.update_xaxes(range=[0, 30], dtick=10, title_text="Perinatal death per 10,000 pregnancies", row=1, col=1)
 f.update_yaxes(tickvals=y, ticktext=[LAB[k] for k in CLS], range=YR, tickfont=dict(size=18), row=1, col=1)
@@ -102,10 +114,10 @@ f.update_xaxes(tickfont=dict(size=18, color=INK2))
 f.update_xaxes(title_font=dict(size=18, color=INK2), row=1, col=1)
 f.add_annotation(xref="x domain", yref="y domain", x=0, y=1.0, yanchor="bottom", xanchor="left", yshift=44, text="<b>A</b>  Perinatal death with each strategy",
                  showarrow=False, font=dict(size=21))
-f.add_annotation(xref="paper", yref="paper", x=-0.19, y=-0.088, xanchor="left", showarrow=False, font=dict(size=17, color=INK2), align="left",
-                 text="B–G: difference, delivery in week 39 minus expectant management, with 95% credible interval.<br>"
+f.add_annotation(xref="paper", yref="paper", x=-0.19, y=-0.112, xanchor="left", showarrow=False, font=dict(size=17, color=INK2), align="left",
+                 text="B–G: difference, delivery in week 39 minus expectant management, with 95% confidence interval.<br>"
                       "Left of the line, fewer events with delivery. Filled marks: interval excludes zero.")
-f.update_layout(margin=dict(l=215, r=20, t=120, b=150), legend=dict(orientation="h", xref="paper", x=0.0, xanchor="left", y=1.0, yanchor="bottom", font=dict(size=18),
+f.update_layout(margin=dict(l=215, r=20, t=120, b=190), legend=dict(orientation="h", xref="paper", x=0.0, xanchor="left", y=1.0, yanchor="bottom", font=dict(size=18),
                 bgcolor="rgba(0,0,0,0)"))
 f.layout.legend.y = f.layout.yaxis.domain[1] + 0.006; f.layout.legend.x = 0.0
 f.add_annotation(xref="paper", yref="y domain", x=-0.19, y=1.0, yanchor="bottom", yshift=4, xanchor="left", showarrow=False, text="<b>BMI, kg/m²</b>", font=dict(size=17, color=INK2))
@@ -115,9 +127,9 @@ save(f, "Figure_2", 1100, 1350)
 
 # ---------------------------------------------------------------- Figure 3 (same 1,100 px logical width, 4 rows by 2 columns)
 P3 = [("death", "Perinatal death"), ("neonatal", "Neonatal death"), ("nicu", "NICU admission"), ("morb", "Composite neonatal morbidity"),
-      ("aven6", "Ventilation longer than 6 hours"), ("macro", "Birth weight 4,500 g or more"), ("smm", "Severe maternal morbidity"),
+      ("aven6", "Ventilation longer than 6 hours"), ("macro", "Birthweight ≥4500 g"), ("smm", "Severe maternal morbidity"),
       ("plac", "Third- or fourth-degree laceration")]
-GRP = [("lt25", "BMI less than 25.0", G_LT25, "circle", -0.2), ("all", "All classes", G_ALL, "diamond", 0.0), ("ob35p", "BMI 35.0 or higher", G_OB35, "circle", 0.2)]
+GRP = [("lt25", "BMI <25.0", G_LT25, "circle", -0.2), ("all", "All classes", G_ALL, "diamond", 0.0), ("ob35p", "BMI ≥35.0", G_OB35, "circle", 0.2)]
 WK = [("w38", 38), ("w39", 39), ("w40", 40)]
 f = make_subplots(rows=4, cols=2, horizontal_spacing=0.11, vertical_spacing=0.075)
 for i, (o, title) in enumerate(P3):
@@ -140,7 +152,7 @@ f.update_yaxes(showgrid=True, gridcolor=GRID, zeroline=False, showline=False, ti
                title_text="per 10,000", title_font=dict(size=17, color=INK2))
 f.add_annotation(xref="paper", yref="paper", x=0.5, y=-0.068, showarrow=False, font=dict(size=17, color=INK2), align="center",
                  text="Week of time zero: delivery within that week compared with expectant management. Below the line, fewer events with delivery.<br>"
-                      "Differences per 10,000 pregnancies (A, B) or live births (C–H), 95% credible intervals. Filled marks: interval excludes zero.")
+                      "Differences per 10,000 pregnancies (A, B) or live births (C–H), 95% confidence intervals. Filled marks: interval excludes zero.")
 f.update_layout(margin=dict(l=95, r=25, t=95, b=135), legend=dict(orientation="h", x=0.5, xanchor="center", y=1.035, yanchor="bottom", font=dict(size=19)))
 save(f, "Figure_3", 1100, 1350)
 
@@ -151,11 +163,11 @@ def box(x0, y0, x1, y1, text, fill="white", size=16, line=INK2, bold=False, colo
     f.add_annotation(x=(x0 + x1) / 2, y=(y0 + y1) / 2, text=f"<b>{text}</b>" if bold else text, showarrow=False, font=dict(size=size, color=color), align="center")
 def arrow(x0, y0, x1, y1):
     f.add_annotation(x=x1, y=y1, ax=x0, ay=y0, xref="x", yref="y", axref="x", ayref="y", showarrow=True, arrowhead=2, arrowsize=1.1, arrowwidth=1.5, arrowcolor=INK2, text="")
-box(0.04, 0.93, 0.46, 0.995, "Live births and fetal deaths at 20 weeks or later,<br>US residents, 2019–2024<br><b>n = " + N["flow_all"] + "</b>")
-exc = [(0.893, "Multiple gestation: " + N["flow_ex_multiple"]), (0.851, "Gestation below 39 weeks or unknown: " + N["flow_ex_ga"]),
+box(0.04, 0.93, 0.46, 0.995, "Live births and fetal deaths at 20 weeks or later,<br>US residents, 2019 to 2024<br><b>n = " + N["flow_all"] + "</b>")
+exc = [(0.893, "Multiple gestation: " + N["flow_ex_multiple"]), (0.851, "Gestation <39 weeks or unknown: " + N["flow_ex_ga"]),
        (0.809, "Prepregnancy BMI unknown: " + N["flow_ex_bmi"]), (0.767, "No gestational diabetes: " + N["flow_ex_nogdm"]),
        (0.725, "Prepregnancy diabetes or chronic hypertension: " + N["flow_ex_pdm_cht"]),
-       (0.677, "Previous cesarean, or noncephalic or unknown<br>presentation: " + N["flow_ex_prevcs_pres"]), (0.629, "Congenital anomaly: " + N["flow_ex_anom"])]
+       (0.677, "Previous caesarean, or noncephalic or unknown<br>presentation: " + N["flow_ex_prevcs_pres"]), (0.629, "Congenital anomaly: " + N["flow_ex_anom"])]
 for yy, tx in exc:
     h = 0.044 if "<br>" in tx else 0.034
     box(0.36, yy - h / 2, 0.99, yy + h / 2, tx, fill=BAND, size=15, line="#c9c8c2"); arrow(0.22, yy, 0.36, yy)
@@ -169,7 +181,7 @@ for x, tx in [(0.21, "Observed course"), (0.575, "Delivery in week 39"), (0.862,
 f.add_shape(type="line", x0=0.43, x1=0.72, y0=0.398, y1=0.398, line=dict(color=DELIV, width=3))
 f.add_shape(type="line", x0=0.735, x1=0.99, y0=0.398, y1=0.398, line=dict(color=EXPECT, width=3))
 cy = [0.335, 0.215, 0.095]; CC = [DELIV, G_LT25, EXPECT]
-crs = ["<b>I</b>  Labor induction with birth<br>in week 39<br>n = " + N["n_I_w39"], "<b>S</b>  Birth without induction<br>or stillbirth in week 39<br>n = " + N["n_S_w39"],
+crs = ["<b>I</b>  Labour induction with birth<br>in week 39<br>n = " + N["n_I_w39"], "<b>S</b>  Birth without induction<br>or stillbirth in week 39<br>n = " + N["n_S_w39"],
        "<b>O</b>  Continued to 40 0/7 weeks<br>n = " + N["n_O_w39"]]
 for tx, cc, yy in zip(crs, CC, cy):
     box(0.02, yy - 0.05, 0.40, yy + 0.05, tx, size=15); f.add_shape(type="rect", x0=0.02, y0=yy - 0.05, x1=0.034, y1=yy + 0.05, fillcolor=cc, line=dict(width=0))

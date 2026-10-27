@@ -11,12 +11,11 @@ individual-level data are included in this repository.
 | Path | Purpose |
 |---|---|
 | `rust/` | `vitals`: multithreaded fixed-width parser of the NCHS files. Applies the eligibility criteria and writes counts by covariate pattern (`gdm`), the study flow (`gdmflow`) and birthweight distributions (`bwq`). Field positions follow the NCHS user guides. |
-| `rust_ccw/` | `ccw`: clone-censor-weight estimation. Logistic models for the probabilities of induction and birth in the trial week and of continuation to the next week within each BMI class, weights truncated at the 99th percentile, normalized risks, and a Bayesian bootstrap that refits both models in every draw. |
+| `rust_ccw/` | `ccw`: clone-censor-weight estimation. Logistic models for the probabilities of induction and birth in the trial week and of continuation to the next week within each BMI class, weights truncated at the 99th percentile, normalised risks, and a nonparametric bootstrap of pregnancies (Poisson frequencies on covariate-pattern cells, ) that refits both models in every replicate. Percentile 95% confidence intervals. |
 | `scripts/download*.sh` | Download the NCHS files and user guides. |
 | `scripts/bw_thresholds.py` | Birthweight 10th percentile by week and sex. |
-| `scripts/gdm_ccw.py` | Trials at 38, 39 and 40 weeks, covariate balance and sensitivity analyses. Calls `rust_ccw`. |
-| `scripts/psm.py` | Propensity score matched conventional comparison (post hoc). |
-| `scripts/manuscript_numbers.py`, `scripts/figures.py` | Tables, reported numbers and figures. |
+| `scripts/gdm_ccw.py` | Trials at 38, 39 and 40 weeks, effect modification by BMI on the ratio and difference scales with homogeneity tests, E-values, covariate balance and sensitivity analyses. Calls `rust_ccw`. |
+| `scripts/numbers_ppe.py`, `scripts/figures.py`, `scripts/dag.py` | Tables, reported numbers, figures and the directed acyclic graph. |
 | `scripts/validate_rust.py` | Check of `rust_ccw` against statsmodels on identical data. |
 | `scripts/util.py` | Shared helpers (design matrix, E-value). |
 | `scripts/run_all.sh` | Whole pipeline. |
@@ -31,13 +30,13 @@ PY=python NCPU=12 SEVENZIP=7zz bash scripts/run_all.sh
 ```
 
 Results are written to `outputs/` (JSON and TSV) and `figures/`. The clone-censor-weight step for all three trials,
-with 1,000 refitted bootstrap draws each, takes about 100 seconds with 48 threads. Random seeds are fixed in the
+with 1,000 refitted bootstrap replicates each, takes about 100 seconds with 48 threads. Random seeds are fixed in the
 scripts.
 
 ## Validation
 
 `rust_ccw` was checked against statsmodels generalized linear models on the same covariate-pattern counts
-(`scripts/validate_rust.py`): treatment model coefficients agreed to within 1e-12.
+(`scripts/validate_rust.py`): treatment model coefficients agreed to within 1e-12. Unit tests in `rust_ccw` (`cargo test --release`) check the Poisson and binomial samplers against their theoretical means and variances.
 
 ## License
 

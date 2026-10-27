@@ -41,10 +41,8 @@ ls inputs/natality/Nat20{19,20,21,22,23,24}us.zip inputs/fetal/Fetal20{19,20,21,
   xargs -P "$NCPU" -I{} bash -c 'k=nat; case {} in *Fetal*) k=fet;; esac; unz {} | $V $k 8 gdmflow > work/agg_flow/$(basename {} .zip).tsv 2>/dev/null'
 cat work/agg_flow/*.tsv | awk -F'\t' '{n[$4]+=$5} END{for(s in n) print s"\t"n[s]}' | sort -n > outputs/flow_counts.tsv
 
-# 4. clone-censor-weight analysis, trials at 39, 40 and 38 weeks (refitted Bayesian bootstrap in rust_ccw)
+# 4. clone-censor-weight analysis, trials at 39, 40 and 38 weeks (nonparametric Poisson bootstrap with refitted weights in rust_ccw)
 (cd scripts && $PY -W ignore gdm_ccw.py main)
-# 5. propensity score matched conventional comparison (post hoc amendment a)
-(cd scripts && $PY -W ignore psm.py 1000 > /dev/null)
-# 6. reported numbers, then figures and the balance table
-(cd scripts && $PY -W ignore manuscript_numbers.py > /dev/null && $PY -W ignore figures.py > /dev/null)
+# 5. reported numbers and tables, then figures and the directed acyclic graph
+(cd scripts && $PY -W ignore numbers_ppe.py > /dev/null && $PY -W ignore figures.py > /dev/null && $PY -W ignore dag.py > /dev/null)
 echo "done: outputs/ and figures/"

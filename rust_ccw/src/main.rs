@@ -1,4 +1,4 @@
-//! Clone-censor-weight Bayesian bootstrap with refitted treatment models (amendment n).
+//! Clone-censor-weight estimation with refitted treatment models and a nonparametric (Poisson) bootstrap (CCW_BOOT=freq).
 //! Input directory (written by scripts/ccw.py export): meta.json, cells.bin (f64 columns: cls, pid, course, risk, live,
 //! then one event column per outcome), X_<k>.bin (row-major f64 design matrix of class k, npat x p).
 //! Usage: ccw point <dir>            -> <dir>/point.json (weights fitted from zero, risks, params, truncation)
@@ -44,7 +44,45 @@ impl Rng {
         }
     }
     fn beta(&mut self, a: f64, b: f64) -> f64 { let x = self.gamma(a); let y = self.gamma(b); if x + y > 0.0 { x / (x + y) } else { 0.5 } }
+    /// Poisson(lam): multiplication method below 10, PTRS (Hoermann 1993) above.
+    fn poisson(&mut self, lam: f64) -> f64 {
+        if lam <= 0.0 { return 0.0; }
+        if lam < 10.0 { let l = (-lam).exp(); let mut k = 0.0; let mut p = self.unif(); while p > l { k += 1.0; p *= self.unif(); } return k; }
+        let slam = lam.sqrt(); let loglam = lam.ln(); let b = 0.931 + 2.53 * slam; let a = -0.059 + 0.02483 * b;
+        let invalpha = 1.1239 + 1.1328 / (b - 3.4); let vr = 0.9277 - 3.6224 / (b - 2.0);
+        loop {
+            let u = self.unif() - 0.5; let v = self.unif(); let us = 0.5 - u.abs();
+            let k = ((2.0 * a / us + b) * u + lam + 0.43).floor();
+            if us >= 0.07 && v <= vr { return k; }
+            if k < 0.0 || (us < 0.013 && v > us) { continue; }
+            if (v * invalpha / (a / (us * us) + b)).ln() <= -lam + k * loglam - ln_gamma(k + 1.0) { return k; }
+        }
+    }
+    /// Binomial(n, p), exact: beta order-statistic splitting (Knuth) down to n <= 64, then Bernoulli sums.
+    fn binomial(&mut self, n: f64, p: f64) -> f64 {
+        let (mut n, mut p) = (n.round().max(0.0), p.clamp(0.0, 1.0)); let mut k = 0.0;
+        if p <= 0.0 || n == 0.0 { return 0.0; } if p >= 1.0 { return n; }
+        while n > 64.0 {
+            let a = 1.0 + (n / 2.0).floor(); let b = n + 1.0 - a; let x = self.beta(a, b);
+            if x >= p { n = a - 1.0; p /= x; } else { k += a; n = b - 1.0; p = (p - x) / (1.0 - x); }
+        }
+        for _ in 0..(n as usize) { if self.unif() < p { k += 1.0; } }
+        k
+    }
 }
+
+/// ln Gamma(x) for x > 0 (Lanczos, g = 7, n = 9).
+fn ln_gamma(x: f64) -> f64 {
+    const C: [f64; 9] = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+        12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+    if x < 0.5 { return (std::f64::consts::PI / (std::f64::consts::PI * x).sin()).ln() - ln_gamma(1.0 - x); }
+    let x = x - 1.0; let mut a = C[0]; let t = x + 7.5; for i in 1..9 { a += C[i] / (x + i as f64); }
+    0.5 * (2.0 * std::f64::consts::PI).ln() + (x + 0.5) * t.ln() - t + a.ln()
+}
+
+/// Bootstrap type from CCW_BOOT: "freq" = nonparametric Poisson bootstrap of pregnancies (amendment b), otherwise Bayesian.
+fn freq_boot() -> bool { std::env::var("CCW_BOOT").map(|v| v == "freq").unwrap_or(false) }
+fn total_draw(rng: &mut Rng, n: f64, freq: bool) -> f64 { if freq { rng.poisson(n) } else { rng.gamma(n) } }
 
 // ---------- weighted logistic regression by IRLS (same problem as statsmodels GLM Binomial with var_weights) ----------
 fn expit(e: f64) -> f64 { if e >= 0.0 { 1.0 / (1.0 + (-e).exp()) } else { let z = e.exp(); z / (1.0 + z) } }
@@ -318,18 +356,21 @@ fn fit_weights_h(d: &Data, t: &[f64], start: Option<&Vec<(Vec<f64>, Vec<f64>)>>,
 /// Some = Beta-drawn event fractions. rec (dump mode) receives the drawn events per outcome.
 fn risks(d: &Data, t: &[f64], f: &Fit, mut rng: Option<&mut Rng>, mut rec: Option<&mut Vec<Vec<f64>>>) -> Vec<Vec<[f64; 2]>> {
     let k = d.classes.len(); let no = d.outcomes.len(); let n = t.len();
+    let freq = freq_boot();
     let mut num = vec![[0.0f64; 2]; k * no]; let mut den = vec![[0.0f64; 4]; k];
     if let Some(r) = rec.as_deref_mut() { *r = vec![vec![0.0; n]; no]; }
     for i in 0..n {
         let c = d.cls[i]; let (wa, wb) = (f.wa[i], f.wb[i]);
-        let dr = t[i]; let dl = if d.risk[i] > 0.0 { t[i] * d.live[i] / d.risk[i] } else { 0.0 };
+        let dr = t[i];
+        let dl = if d.risk[i] <= 0.0 { 0.0 } else { match (freq, rng.as_deref_mut()) {
+            (true, Some(r)) => r.binomial(t[i], d.live[i] / d.risk[i]), _ => t[i] * d.live[i] / d.risk[i] } };
         let dc = &mut den[c]; dc[0] += wa * dr; dc[1] += wb * dr; dc[2] += wa * dl; dc[3] += wb * dl;
         let evs = &d.ev_cm[i * no..(i + 1) * no];
         for o in 0..no {
             let e = evs[o]; if e <= 0.0 { continue; }
             let (nn, dn) = if d.den_live[o] { (d.live[i], dl) } else { (d.risk[i], dr) };
             let ev = match rng.as_deref_mut() { None => if nn > 0.0 { e * dn / nn } else { 0.0 },
-                Some(r) => if e >= nn { dn } else { dn * r.beta(e, nn - e) } };
+                Some(r) => if freq { r.binomial(dn, (e / nn).min(1.0)) } else if e >= nn { dn } else { dn * r.beta(e, nn - e) } };
             let q = &mut num[c * no + o]; q[0] += wa * ev; q[1] += wb * ev;
             if let Some(r) = rec.as_deref_mut() { r[o][i] = ev; }
         }
@@ -368,7 +409,7 @@ fn main() {
         let parts: Vec<(f64, f64, f64)> = jobs.into_par_iter().map(|js| {
             let s0 = std::time::Instant::now();
             let mut rngs: Vec<Rng> = js.iter().map(|&j| Rng::new(99 + j as u64)).collect();
-            let ts: Vec<Vec<f64>> = rngs.iter_mut().map(|rng| d.risk.iter().map(|&n| rng.gamma(n)).collect()).collect(); let s1 = s0.elapsed().as_secs_f64();
+            let ts: Vec<Vec<f64>> = rngs.iter_mut().map(|rng| d.risk.iter().map(|&n| total_draw(rng, n, freq_boot())).collect()).collect(); let s1 = s0.elapsed().as_secs_f64();
             let ws = fit_weights_batch(&d, &ts, &point.params, &h0); let s2 = s0.elapsed().as_secs_f64();
             for b in 0..js.len() { let f = Fit { wa: ws[b].0.clone(), wb: ws[b].1.clone(), params: vec![], trunc: vec![], conv: vec![] }; let _ = risks(&d, &ts[b], &f, Some(&mut rngs[b]), None); }
             let s3 = s0.elapsed().as_secs_f64(); (s1, s2 - s1, s3 - s2) }).collect();
@@ -383,7 +424,7 @@ fn main() {
         // one draw: write drawn totals t, drawn events per outcome, and the rust risks, for an exact check in python
         let seed: u64 = a[3].parse().unwrap(); let j: u64 = a[4].parse().unwrap();
         let mut rng = Rng::new(seed.wrapping_mul(1_000_003).wrapping_add(j));
-        let t: Vec<f64> = d.risk.iter().map(|&n| rng.gamma(n)).collect();
+        let t: Vec<f64> = d.risk.iter().map(|&n| total_draw(&mut rng, n, freq_boot())).collect();
         let h0 = point_h(); let f = fit_weights_h(&d, &t, Some(&point.params), Some(&h0)); let mut rec: Vec<Vec<f64>> = vec![];
         let r = risks(&d, &t, &f, Some(&mut rng), Some(&mut rec));
         let mut buf: Vec<u8> = vec![]; for v in &t { buf.extend_from_slice(&v.to_le_bytes()); }
@@ -399,7 +440,7 @@ fn main() {
     let jobs: Vec<Vec<usize>> = (0..nd).collect::<Vec<_>>().chunks(bsz).map(|c| c.to_vec()).collect();
     let res: Vec<Vec<Vec<[f64; 2]>>> = jobs.into_par_iter().flat_map_iter(|js| {
         let mut rngs: Vec<Rng> = js.iter().map(|&j| Rng::new(seed.wrapping_mul(1_000_003).wrapping_add(j as u64))).collect();
-        let ts: Vec<Vec<f64>> = rngs.iter_mut().map(|rng| d.risk.iter().map(|&n| rng.gamma(n)).collect()).collect();
+        let ts: Vec<Vec<f64>> = rngs.iter_mut().map(|rng| d.risk.iter().map(|&n| total_draw(rng, n, freq_boot())).collect()).collect();
         let ws = fit_weights_batch(&d, &ts, &point.params, &h0);
         let out: Vec<Vec<Vec<[f64; 2]>>> = (0..js.len()).map(|b| { let f = Fit { wa: ws[b].0.clone(), wb: ws[b].1.clone(), params: vec![], trunc: vec![], conv: vec![] };
             risks(&d, &ts[b], &f, Some(&mut rngs[b]), None) }).collect();
@@ -417,6 +458,22 @@ mod tests {
         let v: Vec<f64> = (0..n).map(|_| f()).collect(); let m = v.iter().sum::<f64>() / n as f64;
         (m, v.iter().map(|x| (x - m) * (x - m)).sum::<f64>() / (n - 1) as f64)
     }
+    #[test]
+    fn poisson_binomial_moments() {
+        let mut r = Rng::new(11);
+        for &l in &[0.3, 4.0, 12.0, 250.0, 40000.0] {
+            let (m, v) = moments(&mut || r.poisson(l), 200_000);
+            assert!((m - l).abs() < 5.0 * (l / 200_000f64).sqrt(), "poisson mean l={l} m={m}");
+            assert!((v / l - 1.0).abs() < 0.03, "poisson var l={l} v={v}");
+        }
+        for &(n, p) in &[(10.0, 0.3), (65.0, 0.02), (900.0, 0.004), (50000.0, 0.6), (300.0, 0.97)] {
+            let (m, v) = moments(&mut || r.binomial(n, p), 200_000); let ev = n * p * (1.0 - p);
+            assert!((m - n * p).abs() < 5.0 * (ev / 200_000f64).sqrt() + 1e-9, "binom mean n={n} p={p} m={m}");
+            assert!((v / ev - 1.0).abs() < 0.03, "binom var n={n} p={p} v={v}");
+        }
+        assert!((ln_gamma(10.0) - 362880f64.ln()).abs() < 1e-9);
+    }
+
     #[test]
     fn gamma_moments() {
         let mut r = Rng::new(1);
